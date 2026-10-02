@@ -1,0 +1,162 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import Unauthorized from "./pages/Unauthorized";
+import MasterDataAdmin from "./pages/MasterDataAdmin";
+import UserManagement from "./pages/UserManagement";
+import ProtectedRoute from "./components/ProtectedRoute";
+import TicketManagement from "./pages/TicketManagement";
+import TicketDetail from "./pages/TicketDetail";
+import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
+import { Toaster } from "react-hot-toast";
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Toaster position="top-right" />
+      <Routes>
+        <Route path="/" element={<Login />} />
+
+        <Route
+          path="/admin/dashboard"
+          element={
+            <ProtectedRoute role={1}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute role={1}>
+              <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/staff/dashboard"
+          element={
+            <ProtectedRoute role={2}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/master"
+          element={
+            <ProtectedRoute role={1}>
+              <MasterDataAdmin />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/tickets"
+          element={
+            <ProtectedRoute role={1}>
+              <TicketManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/user/dashboard"
+          element={
+            <ProtectedRoute role={3}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/user/tickets"
+          element={
+            <ProtectedRoute role={3}>
+              <TicketManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/staff/tickets"
+          element={
+            <ProtectedRoute role={2}>
+              <TicketManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/executive/dashboard"
+          element={
+            <ProtectedRoute role={4}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/executive/tickets"
+          element={
+            <ProtectedRoute role={4}>
+              <TicketManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/engineer/dashboard"
+          element={
+            <ProtectedRoute role={5}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/engineer/tickets"
+          element={
+            <ProtectedRoute role={5}>
+              <TicketManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/tickets/:id"
+          element={
+            <ProtectedRoute>
+              <TicketDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="/unauthorized" element={<Unauthorized />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;

@@ -1,0 +1,1113 @@
+import { useState, useEffect, useRef } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { useNavigate, NavLink, useLocation } from "react-router-dom";
+
+import {
+  FiLogOut,
+  FiBell,
+  FiMenu,
+  FiX,
+  FiUser,
+  FiGrid,
+  FiFileText,
+  FiPlus,
+  FiDatabase,
+  FiSettings,
+  FiSun,
+  FiMoon,
+} from "react-icons/fi";
+
+import { updateOnlineStatus, getCurrentUser } from "../../services/userService";
+
+import { isTokenExpired } from "../../utils/auth";
+
+import {
+  getNotifications,
+  getUnreadCount,
+  markNotificationRead,
+  deleteNotification,
+} from "../../services/notificationService";
+
+import toast from "react-hot-toast";
+import useTicketSocket from "../../hooks/useTicketSocket";
+import TicketModal from "../modal/TicketModal";
+import { useTheme } from "../../context/ThemeContext";
+
+export default function DashboardLayout({ title, children, menu }) {
+  const { logout, user } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [showCreateTicket, setShowCreateTicket] = useState(false);
+  const isDashboard = location.pathname.includes("/dashboard");
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(null);
+
+  const [openNotif, setOpenNotif] = useState(false);
+  const [openProfile, setOpenProfile] = useState(false);
+
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loadingNotif, setLoadingNotif] = useState(false);
+
+  const notifRef = useRef(null);
+  const profileRef = useRef(null);
+  const prevUnreadRef = useRef(0);
+  const audioRef = useRef(null);
+
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      await fetch(`${import.meta.env.VITE_API_URL}/v1/users/logout`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+      });
+    } catch (err) {
+      console.error("Logout API error:", err);
+    }
+
+    logout();
+    navigate("/");
+  };
+  
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const userData = await getCurrentUser();
+        setIsOnline(userData.is_online);
+      } catch (err) {
+        console.error("Gagal fetch status:", err);
+      }
+    };
+
+    fetchStatus();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setOpenNotif(false);
+      }
+
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setOpenProfile(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (isTokenExpired()) {
+        logout();
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [logout]);
+
+  useEffect(() => {
+    fetchNotifications();
+
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const requestPermission = async () => {
+      if ("Notification" in window && Notification.permission === "default") {
+        try {
+          const permission = await Notification.requestPermission();
+
+          console.log("Notification permission:", permission);
+        } catch (error) {
+          console.error("Notification permission error:", error);
+        }
+      }
+    };
+
+    requestPermission();
+  }, []);
+
+  useEffect(() => {
+    audioRef.current = new Audio("/sounds/bell.wav");
+
+    audioRef.current.preload = "auto";
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  const showBrowserNotification = (notif) => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(notif.title, {
+        body: notif.message,
+        icon: "/vite.svg",
+      });
+    }
+  };
+
+  const playNotificationSound = async () => {
+    try {
+      if (!audioRef.current) {
+        return;
+      }
+
+      audioRef.current.currentTime = 0;
+
+      await audioRef.current.play();
+    } catch (error) {
+      console.log("Audio blocked:", error);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      setLoadingNotif(true);
+
+      const [notifData, unreadData] = await Promise.all([
+        getNotifications(),
+        getUnreadCount(),
+      ]);
+
+      const unread = unreadData || 0;
+      const safeNotif = notifData || [];
+
+      if (unread > prevUnreadRef.current) {
+        const latestNotif = safeNotif[0];
+
+        if (latestNotif) {
+          playNotificationSound();
+
+          showBrowserNotification(latestNotif);
+
+          toast.dismiss();
+
+          toast.custom(
+            (t) => (
+              <div
+                className={`
+                  w-[calc(100vw-2rem)]
+                  max-w-sm
+                  bg-white
+                  shadow-lg
+                  rounded-xl
+                  border
+                  p-4
+                  flex
+                  items-start
+                  gap-3
+                  ${t.visible ? "animate-enter" : "animate-leave"}
+                `}
+              >
+                <div className="mt-1 text-green-500 shrink-0">✅</div>
+
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 break-words">
+                    {latestNotif.title}
+                  </p>
+
+                  <p className="text-sm text-gray-600 mt-1 break-words">
+                    {latestNotif.message}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => toast.dismiss(t.id)}
+                  className="text-gray-400 hover:text-red-500 transition shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+            ),
+            {
+              duration: 5000,
+            },
+          );
+        }
+      }
+
+      prevUnreadRef.current = unread;
+
+      setNotifications(safeNotif);
+      setUnreadCount(unread);
+    } catch (err) {
+      console.error("Failed fetch notification:", err);
+    } finally {
+      setLoadingNotif(false);
+    }
+  };
+
+  const handleReadNotification = async (id) => {
+    try {
+      await markNotificationRead(id);
+
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                is_read: true,
+              }
+            : item,
+        ),
+      );
+
+      setUnreadCount((prev) => Math.max(prev - 1, 0));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteNotification = async (id) => {
+    try {
+      await deleteNotification(id);
+
+      setNotifications((prev) => prev.filter((item) => item.id !== id));
+
+      setUnreadCount((prev) => Math.max(prev - 1, 0));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleNotificationClick = async (notif) => {
+    try {
+      await handleReadNotification(notif.id);
+
+      if (notif.ticket_id) {
+        navigate(`/tickets/${notif.ticket_id}`);
+
+        setOpenNotif(false);
+      }
+    } catch (error) {
+      console.error("Failed to handle notification:", error);
+    }
+  };
+
+  useTicketSocket({
+    onNotification: (notif) => {
+      setNotifications((prev) => [notif, ...prev]);
+
+      setUnreadCount((prev) => prev + 1);
+
+      playNotificationSound();
+
+      showBrowserNotification(notif);
+    },
+  });
+
+  return (
+    <div
+      className={`
+        ccit-app-shell
+        ${location.pathname.includes("/dashboard") ? "ccit-dashboard-shell" : ""}
+        min-h-screen
+        h-screen
+        flex
+        overflow-hidden
+        w-full
+        min-w-0
+      `}
+    >
+      {sidebarOpen && (
+        <div
+          className="
+            fixed
+            inset-0
+            bg-black/40
+            z-40
+            lg:hidden
+          "
+          onClick={() => setSidebarOpen(false)}
+          style={{ zIndex: 110, touchAction: "manipulation" }}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        id="helpdesk-mobile-sidebar"
+        className={`
+          fixed
+          lg:static
+          top-0
+          left-0
+          z-50
+          h-full
+          w-64
+          shrink-0
+          bg-white
+          shadow-md
+          transform
+          transition-transform
+          duration-300
+          flex
+          flex-col
+
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+
+          lg:translate-x-0
+        `}
+        style={{
+          zIndex: 120,
+          WebkitTransform: sidebarOpen ? "translateX(0)" : undefined,
+          touchAction: "pan-y",
+        }}
+        aria-label="Navigasi utama"
+      >
+        {/* SIDEBAR HEADER */}
+        <div
+          className="
+            p-4
+            sm:p-6
+            border-b
+            flex
+            justify-between
+            items-center
+            shrink-0
+          "
+        >
+          <h2 className="text-lg sm:text-xl font-bold text-orange-600">
+            Helpdesk Center
+          </h2>
+
+          <button
+            type="button"
+            className="lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <FiX size={22} />
+          </button>
+        </div>
+
+        {/* USER INFO */}
+        <div className="p-4 sm:p-6 border-b shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative shrink-0">
+              <div
+                className="
+                  w-10
+                  h-10
+                  rounded-full
+                  bg-orange-500
+                  flex
+                  items-center
+                  justify-center
+                  text-white
+                  font-semibold
+                "
+              >
+                {user?.name?.charAt(0)?.toUpperCase()}
+              </div>
+
+              <span
+                className={`
+                  absolute
+                  bottom-0
+                  right-0
+                  w-3
+                  h-3
+                  border-2
+                  border-white
+                  rounded-full
+
+                  ${isOnline ? "bg-green-500" : "bg-gray-400"}
+                `}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <p className="font-semibold text-gray-800 truncate">
+                {user?.name}
+              </p>
+
+              <p className="text-xs text-gray-500 uppercase truncate">
+                {user?.role}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* NAVIGATION */}
+        <nav
+          className="
+            flex-1
+            p-3
+            sm:p-4
+            space-y-2
+            overflow-y-auto
+          "
+        >
+          {menu.map((item, i) => {
+            const Icon = item.icon;
+
+            return (
+              <NavLink
+                key={i}
+                to={item.path}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `
+                    w-full
+                    flex
+                    items-center
+                    gap-3
+                    px-4
+                    py-3
+                    rounded-lg
+                    transition-all
+                    duration-200
+                    text-sm
+                    ${
+                      isActive
+                        ? "bg-orange-100 text-orange-600"
+                        : "hover:bg-orange-50 hover:text-orange-600"
+                    }
+                  `
+                }
+              >
+                <Icon size={18} className="shrink-0" />
+
+                <span className="truncate">{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </nav>
+
+        {/* THEME */}
+        <div className="px-3 sm:px-4 pb-3 shrink-0">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="ccit-sidebar-theme-toggle"
+            aria-label={isDark ? "Aktifkan mode normal" : "Aktifkan mode gelap"}
+          >
+            <span className="flex items-center gap-3 min-w-0">
+              <span className="ccit-sidebar-theme-icon">
+                {isDark ? <FiMoon size={18} /> : <FiSun size={18} />}
+              </span>
+              <span className="truncate">{isDark ? "Mode Gelap" : "Mode Normal"}</span>
+            </span>
+            <span className={`ccit-mini-switch ${isDark ? "is-on" : ""}`}><span /></span>
+          </button>
+        </div>
+
+        {/* LOGOUT */}
+        <div className="p-3 sm:p-4 border-t shrink-0">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="
+              w-full
+              flex
+              items-center
+              gap-3
+              px-4
+              py-3
+              rounded-lg
+              text-red-500
+              hover:bg-red-50
+              transition-all
+              duration-200
+              text-sm
+            "
+          >
+            <FiLogOut size={18} className="shrink-0" />
+
+            <span>Keluar</span>
+          </button>
+        </div>
+      </aside>
+
+      <div
+        className="
+          flex-1
+          min-w-0
+          flex
+          flex-col
+          h-full
+        "
+      >
+        <header
+          className={`
+            bg-white
+            shadow
+            px-3
+            sm:px-4
+            md:px-6
+            py-3
+            sm:py-4
+            flex
+            justify-between
+            items-center
+            gap-3
+            shrink-0
+            min-w-0
+            ${isDashboard ? "ccit-dashboard-topbar" : "ccit-standard-topbar"}
+          `}
+        >
+          {/* LEFT */}
+          <div
+            className="
+              flex
+              items-center
+              gap-2
+              sm:gap-3
+              min-w-0
+            "
+          >
+            <button
+              type="button"
+              className="
+                lg:hidden
+                shrink-0
+                min-w-[44px]
+                min-h-[44px]
+                flex
+                items-center
+                justify-center
+                rounded-md
+                relative
+                z-[60]
+                cursor-pointer
+                active:bg-gray-100
+              "
+              aria-label="Buka menu navigasi"
+              aria-expanded={sidebarOpen}
+              aria-controls="helpdesk-mobile-sidebar"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                console.log("[Helpdesk] Tombol menu ditekan");
+                setSidebarOpen((open) => !open);
+              }}
+              style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+            >
+              <FiMenu size={24} />
+            </button>
+
+            <div className="ccit-topbar-title-wrap">
+              <h1 className="ccit-topbar-title">{isDashboard ? "Helpdesk CCIT" : title}</h1>
+              {isDashboard && <span className="ccit-topbar-welcome">Selamat datang, <b>{user?.name || "Pengguna"}</b></span>}
+            </div>
+          </div>
+
+          {/* RIGHT */}
+          <div
+            className="
+              flex
+              items-center
+              gap-1
+              sm:gap-2
+              md:gap-4
+              shrink-0
+            "
+          >
+            {/* ONLINE STATUS */}
+            <button
+              type="button"
+              onClick={async () => {
+                const newStatus = !isOnline;
+
+                setIsOnline(newStatus);
+
+                try {
+                  await updateOnlineStatus(newStatus);
+                } catch (err) {
+                  console.error(err);
+
+                  setIsOnline(!newStatus);
+                }
+              }}
+              title={isOnline ? "Klik untuk offline" : "Klik untuk online"}
+              className={`
+                flex
+                items-center
+                gap-2
+                px-2
+                sm:px-3
+                py-1
+                text-xs
+                sm:text-sm
+                rounded-full
+                shrink-0
+
+                ${
+                  isOnline
+                    ? "bg-green-100 text-green-600"
+                    : "bg-gray-200 text-gray-600"
+                }
+              `}
+            >
+              <span
+                className={`
+                  w-2
+                  h-2
+                  rounded-full
+                  shrink-0
+
+                  ${isOnline ? "bg-green-500" : "bg-gray-500"}
+                `}
+              />
+
+              <span className="hidden sm:inline">
+                {isOnline ? "Online" : "Offline"}
+              </span>
+            </button>
+
+            <div className="relative shrink-0" ref={notifRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenNotif((prev) => !prev);
+
+                  setOpenProfile(false);
+                }}
+                className="
+                  p-2
+                  rounded-full
+                  hover:bg-gray-100
+                  relative
+                "
+              >
+                <FiBell size={20} />
+
+                {unreadCount > 0 && (
+                  <span
+                    className="
+                      absolute
+                      -top-1
+                      -right-1
+                      min-w-[18px]
+                      h-[18px]
+                      px-1
+                      flex
+                      items-center
+                      justify-center
+                      text-[10px]
+                      rounded-full
+                      bg-red-500
+                      text-white
+                      font-semibold
+                    "
+                  >
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {openNotif && (
+                <div
+                  className="
+                    fixed
+                    sm:absolute
+                    right-2
+                    sm:right-0
+                    top-[60px]
+                    sm:top-auto
+                    sm:mt-3
+                    w-[calc(100vw-1rem)]
+                    sm:w-96
+                    max-w-sm
+                    bg-white
+                    shadow-lg
+                    rounded-xl
+                    border
+                    z-50
+                    overflow-hidden
+                  "
+                >
+                  {/* NOTIF HEADER */}
+                  <div
+                    className="
+                      p-3
+                      sm:p-4
+                      border-b
+                      font-semibold
+                      flex
+                      items-center
+                      justify-between
+                      gap-3
+                    "
+                  >
+                    <span>Notifikasi</span>
+
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      {unreadCount} Belum dibaca
+                    </span>
+                  </div>
+
+                  {/* NOTIF BODY */}
+                  <div className="max-h-[70vh] sm:max-h-[400px] overflow-y-auto">
+                    {loadingNotif ? (
+                      <div className="p-6 text-center text-gray-400 text-sm">
+                        Loading...
+                      </div>
+                    ) : notifications?.length === 0 ? (
+                      <div className="p-6 text-center text-gray-400 text-sm">
+                        <FiBell size={28} className="mx-auto mb-2" />
+                        Tidak ada notifikasi.
+                      </div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          className={`
+                              w-full
+                              text-left
+                              p-3
+                              sm:p-4
+                              border-b
+                              hover:bg-gray-50
+                              transition
+
+                              ${!notif.is_read ? "bg-orange-50" : ""}
+                            `}
+                        >
+                          <div className="flex justify-between items-start gap-3">
+                            {/* CONTENT */}
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm text-gray-800 break-words">
+                                {notif.title}
+                              </p>
+
+                              <p className="text-sm text-gray-600 mt-1 break-words">
+                                {notif.message}
+                              </p>
+
+                              {notif.ticket_id && notif.ticket_code && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await handleReadNotification(notif.id);
+
+                                    setOpenNotif(false);
+
+                                    navigate(`/tickets/${notif.ticket_id}`);
+                                  }}
+                                  className="
+                                        text-sm
+                                        text-orange-600
+                                        hover:text-orange-800
+                                        font-medium
+                                        mt-2
+                                      "
+                                >
+                                  Buka Tiket
+                                </button>
+                              )}
+
+                              <p className="text-xs text-gray-400 mt-2 break-words">
+                                {new Date(notif.created_at).toLocaleString()}
+                              </p>
+                            </div>
+
+                            {/* ACTION */}
+                            <div className="flex items-start gap-2 shrink-0">
+                              {!notif.is_read && (
+                                <span className="w-2 h-2 rounded-full bg-orange-500 mt-2" />
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteNotification(notif.id)
+                                }
+                                className="
+                                    text-gray-400
+                                    hover:text-red-500
+                                    transition
+                                  "
+                              >
+                                <FiX size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="relative shrink-0" ref={profileRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenProfile((prev) => !prev);
+
+                  setOpenNotif(false);
+                }}
+              >
+                <div
+                  className="
+                    w-8
+                    h-8
+                    rounded-full
+                    bg-orange-500
+                    text-white
+                    flex
+                    items-center
+                    justify-center
+                    text-sm
+                    font-semibold
+                  "
+                >
+                  {user?.name?.charAt(0)?.toUpperCase()}
+                </div>
+              </button>
+
+              {openProfile && (
+                <div
+                  className="
+                    absolute
+                    right-0
+                    mt-2
+                    w-40
+                    bg-white
+                    border
+                    rounded-lg
+                    shadow
+                    z-50
+                    overflow-hidden
+                  "
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigate("/profile");
+
+                      setOpenProfile(false);
+                    }}
+                    className="
+                      w-full
+                      text-left
+                      px-4
+                      py-2
+                      text-sm
+                      hover:bg-orange-50
+                      hover:text-orange-600
+                      flex
+                      items-center
+                      gap-2
+                    "
+                  >
+                    <FiUser size={16} />
+                    Profil
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { navigate("/settings"); setOpenProfile(false); }}
+                    className="
+                      w-full text-left px-4 py-2 text-sm hover:bg-blue-50 hover:text-blue-600 flex items-center gap-2
+                    "
+                  >
+                    <FiSettings size={16} />
+                    Pengaturan
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="
+                      w-full
+                      text-left
+                      px-4
+                      py-2
+                      text-sm
+                      hover:bg-red-50
+                      hover:text-red-600
+                      flex
+                      items-center
+                      gap-2
+                    "
+                  >
+                    <FiLogOut size={16} />
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <main
+          className="
+            flex-1
+            min-h-0
+            min-w-0
+            overflow-y-auto
+            overflow-x-hidden
+            p-3
+            sm:p-4
+            md:p-6
+          "
+        >
+          {children}
+        </main>
+
+        {/* MOBILE BOTTOM NAVIGATION */}
+        <nav
+          className="
+            lg:hidden
+            fixed
+            bottom-0
+            left-0
+            right-0
+            z-[100]
+            h-[72px]
+            bg-white/95
+            backdrop-blur
+            border-t
+            border-gray-200
+            shadow-[0_-8px_24px_rgba(15,23,42,0.08)]
+            grid
+            grid-cols-5
+            items-center
+            px-2
+            pb-[env(safe-area-inset-bottom)]
+          "
+          aria-label="Navigasi bawah"
+        >
+          {[
+            {
+              label: "Dashboard",
+              path: menu?.find((item) => item.label === "Dashboard")?.path,
+              icon: FiGrid,
+            },
+            {
+              label: "Tiket",
+              path: menu?.find((item) => item.label === "Data Tiket")?.path,
+              icon: FiFileText,
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+            const active = Boolean(item.path && location.pathname === item.path);
+            return (
+              <button
+                key={item.label}
+                type="button"
+                disabled={!item.path}
+                onClick={() => item.path && navigate(item.path)}
+                className={`flex h-full flex-col items-center justify-center gap-1 text-[10px] font-medium transition ${
+                  active ? "text-blue-600" : "text-gray-500"
+                } disabled:opacity-40`}
+              >
+                <Icon size={20} strokeWidth={active ? 2.4 : 2} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+
+          {/* CENTER CREATE TICKET */}
+          <button
+            type="button"
+            aria-label="Buat tiket baru"
+            onClick={() => setShowCreateTicket(true)}
+            className="relative -mt-7 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/30 ring-4 ring-white transition active:scale-95"
+          >
+            <FiPlus size={28} strokeWidth={2.2} />
+            <span className="absolute -bottom-5 whitespace-nowrap text-[10px] font-semibold text-gray-600">
+              Buat Tiket
+            </span>
+          </button>
+
+          {/* RIGHT NAV ITEMS */}
+          {[
+            {
+              label: user?.role === "ADMINISTRATOR" || user?.role === 1 ? "User" : "Profil",
+              path:
+                user?.role === "ADMINISTRATOR" || user?.role === 1
+                  ? menu?.find((item) => item.label === "Manajemen User")?.path
+                  : "/profile",
+              icon: FiUser,
+            },
+            {
+              label: user?.role === "ADMINISTRATOR" || user?.role === 1 ? "Master Data" : "Menu",
+              path:
+                user?.role === "ADMINISTRATOR" || user?.role === 1
+                  ? menu?.find((item) => item.label === "Master Data")?.path
+                  : undefined,
+              icon: user?.role === "ADMINISTRATOR" || user?.role === 1 ? FiDatabase : FiMenu,
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+            const active = Boolean(item.path && location.pathname === item.path);
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => {
+                  if (item.path) {
+                    navigate(item.path);
+                  } else {
+                    setSidebarOpen(true);
+                  }
+                }}
+                className={`flex h-full flex-col items-center justify-center gap-1 text-[10px] font-medium transition ${
+                  active ? "text-blue-600" : "text-gray-500"
+                }`}
+              >
+                <Icon size={20} strokeWidth={active ? 2.4 : 2} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {showCreateTicket && (
+          <TicketModal
+            role={user?.role}
+            onClose={() => setShowCreateTicket(false)}
+          />
+        )}
+
+        <footer
+          className="
+            bg-white
+            border-t
+            px-3
+            sm:px-6
+            py-3
+            sm:py-4
+            text-xs
+            sm:text-sm
+            text-gray-500
+            flex
+            flex-col
+            md:flex-row
+            items-center
+            justify-between
+            gap-1
+            text-center
+            shrink-0
+          "
+        >
+          <p className="break-words">© 2026 Helpdesk CCIT Nutech Integrasi</p>
+
+          <p>Version 1.0.0</p>
+        </footer>
+      </div>
+    </div>
+  );
+}

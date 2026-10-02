@@ -1,0 +1,99 @@
+const BASE_URL = `${import.meta.env.VITE_API_URL}/v1/users`;
+
+const getHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
+export async function getUsers(page = 1, search = "", limit = 10) {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    name: search,
+    limit: limit.toString(),
+  });
+
+  const res = await fetch(`${BASE_URL}?${params.toString()}`, {
+    headers: getHeaders(),
+  });
+
+  return res.json();
+}
+
+export async function createUser(data) {
+  const res = await fetch(`${BASE_URL}/register`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  return res.json();
+}
+
+export async function updateUser(id, data) {
+  const res = await fetch(`${BASE_URL}/update/${id}`, {
+    method: "PUT",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  return res.json();
+}
+
+export async function deleteUser(id) {
+  const res = await fetch(`${BASE_URL}/delete/${id}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+
+  return res.json();
+}
+
+export const updateOnlineStatus = async (isOnline) => {
+  const res = await fetch(`${BASE_URL}/online-status`, {
+    method: "PUT",
+    headers: getHeaders(),
+    body: JSON.stringify({ is_online: isOnline }),
+  });
+
+  return res.json();
+};
+
+export const getCurrentUser = async () => {
+  const res = await fetch(`${BASE_URL}/me`, {
+    method: "GET",
+    headers: getHeaders(),
+  });
+
+  const data = await res.json();
+  return data.data;
+};
+
+export const forceOffline = async (userId) => {
+  const res = await fetch(`${BASE_URL}/force-offline/${userId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  return res.json();
+};
+
+export const getProfile = async () => {
+  const res = await fetch(`${BASE_URL}/profile`, {
+    method: "GET",
+    headers: getHeaders(),
+  });
+
+  return res.json();
+};
+
+export const updateProfile = async (data) => {
+  const res = await fetch(`${BASE_URL}/profile`, {
+    method: "PUT",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  return res.json();
+};

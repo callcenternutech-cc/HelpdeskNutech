@@ -1,0 +1,259 @@
+const BASE_URL = `${import.meta.env.VITE_API_URL}/v1`;
+
+const getHeaders = (isJSON = true) => {
+  const headers = {
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+  };
+
+  if (isJSON) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  return headers;
+};
+
+const fetchAPI = async (url, options = {}) => {
+  const res = await fetch(url, options);
+
+  let result;
+  try {
+    result = await res.json();
+  } catch {
+    result = null;
+  }
+
+  if (!res.ok) {
+    throw new Error(result?.message || "Terjadi kesalahan pada server");
+  }
+
+  return result;
+};
+
+export const getTickets = async (filters = {}) => {
+  const query = new URLSearchParams(filters).toString();
+  return fetchAPI(`${BASE_URL}/tickets?${query}`, {
+    headers: getHeaders(),
+  });
+};
+
+export const getTicketById = async (id) => {
+  return fetchAPI(`${BASE_URL}/tickets/${id}`, {
+    headers: getHeaders(),
+  });
+};
+
+export const createTicket = async (formData) => {
+  return fetchAPI(`${BASE_URL}/tickets/create`, {
+    method: "POST",
+    headers: getHeaders(false),
+    body: formData,
+  });
+};
+
+export const updateTicketStatus = async (id, data) => {
+  return fetchAPI(`${BASE_URL}/tickets/update-status/${id}`, {
+    method: "PUT",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateTicketStatusOnly = async (id, data) => {
+  return fetchAPI(`${BASE_URL}/tickets/update-status/${id}`, {
+    method: "PUT",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteTicket = async (id) => {
+  return fetchAPI(`${BASE_URL}/tickets/delete/${id}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+};
+
+export const createTicketResolution = async (ticketId, formData) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/resolution`, {
+    method: "POST",
+    headers: getHeaders(false),
+    body: formData,
+  });
+};
+
+export const getProjects = async () => {
+  return fetchAPI(`${BASE_URL}/projects`, {
+    headers: getHeaders(),
+  });
+};
+
+export const getLocations = async (projectId) => {
+  return fetchAPI(`${BASE_URL}/locations/project/${projectId}`, {
+    headers: getHeaders(),
+  });
+};
+
+export const getParts = async (projectId) => {
+  return fetchAPI(`${BASE_URL}/parts?project_id=${projectId}`, {
+    headers: getHeaders(),
+  });
+};
+
+export const getAssets = async (partId) => {
+  return fetchAPI(`${BASE_URL}/asset-id/part/${partId}`, {
+    headers: getHeaders(),
+  });
+};
+
+export const getStaffs = async () => {
+  return fetchAPI(`${BASE_URL}/users?role_id=2&is_active=true`, {
+    headers: getHeaders(),
+  });
+};
+
+export const getEngineers = async (projectId) => {
+  return fetchAPI(
+    `${BASE_URL}/users?role_id=5&is_active=true&project_id=${projectId}&page=1&limit=50`,
+    {
+      headers: getHeaders(),
+    },
+  );
+};
+
+export const getCauses = async (partId) => {
+  return fetchAPI(`${BASE_URL}/causes?part_id=${partId}&limit=100`, {
+    headers: getHeaders(),
+  });
+};
+
+export const getSolutions = async (causeId) => {
+  return fetchAPI(`${BASE_URL}/solutions?cause_id=${causeId}&limit=100`, {
+    headers: getHeaders(),
+  });
+};
+
+export const getTicketComments = async (ticketId) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/comments`, {
+    headers: getHeaders(),
+  });
+};
+
+export const createTicketComment = async (ticketId, data) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/comments`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  });
+};
+
+export const getTicketHistories = async (ticketId) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/history`, {
+    headers: getHeaders(),
+  });
+};
+
+export const exportTickets = async (filters = {}) => {
+  const cleanFilters = Object.fromEntries(
+    Object.entries(filters).filter(([_, v]) => v !== ""),
+  );
+
+  const query = new URLSearchParams(cleanFilters).toString();
+
+  const res = await fetch(`${BASE_URL}/tickets/export?${query}`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+
+  if (!res.ok) {
+    let message = "Gagal export ticket";
+
+    try {
+      const result = await res.json();
+      message = result?.message || message;
+    } catch {}
+
+    throw new Error(message);
+  }
+
+  const blob = await res.blob();
+
+  const contentDisposition = res.headers.get("Content-Disposition");
+
+  let fileName = "tickets.xlsx";
+
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?([^"]+)"?/);
+
+    if (match?.[1]) {
+      fileName = match[1];
+    }
+  }
+
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+
+  a.href = url;
+  a.download = fileName;
+
+  document.body.appendChild(a);
+  a.click();
+
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const getTicketResolution = async (ticketId) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/resolution`, {
+    headers: getHeaders(),
+  });
+};
+
+export const markTicketCommentsAsRead = async (ticketId) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/comments/read`, {
+    method: "PUT",
+    headers: getHeaders(),
+  });
+};
+
+export const reassignTicket = async (ticketId, formData) => {
+  return fetchAPI(`${BASE_URL}/tickets/reassign/${ticketId}`, {
+    method: "POST",
+    headers: getHeaders(false),
+    body: formData,
+  });
+};
+
+export const createEngineerTicketResolution = async (ticketId, formData) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/engineer-resolution`, {
+    method: "POST",
+    headers: getHeaders(false),
+    body: formData,
+  });
+};
+
+export const getTicketReassignment = async (ticketId) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/reassignment`, {
+    headers: getHeaders(),
+  });
+};
+
+export const getEngineerTicketResolution = async (ticketId) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/engineer-resolution`, {
+    headers: getHeaders(),
+  });
+};
+
+export const responseTicket = async (ticketId) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/response-ticket`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+};
+
+export const markEngineerResolutionAsRead = async (ticketId) => {
+  return fetchAPI(`${BASE_URL}/tickets/${ticketId}/engineer-resolution/read`, {
+    method: "PUT",
+    headers: getHeaders(),
+  });
+};
